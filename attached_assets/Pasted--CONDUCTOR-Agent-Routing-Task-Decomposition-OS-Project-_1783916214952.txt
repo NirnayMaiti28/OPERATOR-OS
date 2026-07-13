@@ -1,0 +1,187 @@
+# CONDUCTOR: Agent Routing & Task Decomposition OS
+
+## Project Specification
+
+Build a production-grade multi-agent orchestration system that intelligently decomposes complex user queries into subtasks and routes them to specialized agents. System must outperform or match AutoGen/LangChain on latency, cost, and task success rate.
+
+## Tech Stack
+- **Backend**: Python 3.11+ with FastAPI
+- **LLM**: Groq API (Claude 3.5 Sonnet - free tier for decomposition & reasoning)
+- **Storage**: SQLite for task logs, Redis optional for state
+- **Agent Execution**: Async/concurrent with timeout handling + public API integration
+- **Public APIs**: Weather, News, Wikipedia, GitHub, Stock Markets, OpenExchangeRates
+- **Benchmarking**: pytest + custom evaluation harness
+
+## Core Architecture
+
+### 1. Task Decomposer
+- Input: User query (string)
+- Process: Use Groq Claude 3.5 Sonnet to break query into atomic subtasks with:
+  - Task description
+  - Required capabilities (retrieval, code, reasoning, data-analysis, tool-integration)
+  - Dependencies (task A must complete before B)
+  - Estimated tokens/cost (Groq free tier tracking)
+  - Tool hints (if this looks like a weather/news/finance query, flag for ToolAgent)
+- Output: Task graph (DAG) with metadata
+- Cost: Free (Groq free tier)
+
+### 2. Agent Router
+- Registry of available agents with capability tags and performance history
+- Routing logic:
+  - Match task requirements to agent capabilities
+  - Use latency/cost history to select best agent for task type
+  - Fallback to secondary agent if primary fails
+  - No hardcoded routing — fully dynamic
+- Output: Agent assignment with retry strategy
+
+### 3. Agent Abstraction Layer
+- Base `Agent` class with:
+  - `execute(task: Task) → Result`
+  - `capabilities: List[str]`
+  - `performance_stats: Dict`
+  - `cost: float` (track API costs)
+- Concrete agents (minimum 5):
+  - **RetrievalAgent**: BM25 + dense embedding search (SBERT/ColBERT)
+  - **ReasoningAgent**: Groq Claude for chain-of-thought + verification
+  - **CodeAgent**: Safe code execution with timeout + sandboxing
+  - **DataAnalysisAgent**: Pandas/polars operations (local)
+  - **ToolAgent**: Orchestrates public APIs:
+    - Weather API (OpenWeatherMap or WeatherAPI)
+    - News API (NewsAPI for trending)
+    - Wikipedia API (research/factual lookup)
+    - GitHub API (code search/repo info)
+    - Stock API (Alpha Vantage or similar)
+    - Currency Exchange API (OpenExchangeRates)
+  - ToolAgent has internal router: maps task type → correct public API → format response
+- Each agent logs execution time, token usage, API cost, success/failure
+
+### 4. Orchestrator
+- Execute task graph with:
+  - Parallel execution where dependencies allow
+  - Task-level timeout (configurable, default 30s)
+  - Graceful failure handling (fallback agents, partial results)
+  - State persistence (checkpoint every task completion)
+- Return: Aggregated result + execution trace
+
+### 5. Observability
+- Structured logging (task ID, agent ID, latency, tokens, status)
+- SQLite schema for audit trail
+- CLI/API endpoint to query execution history
+
+## Deliverables
+
+### Code
+- `src/conductor/decomposer.py` — Task decomposition logic (Groq)
+- `src/conductor/router.py` — Agent routing + selection
+- `src/conductor/agents/` — Base + 5 concrete agents:
+  - `base.py` — Abstract Agent class
+  - `retrieval.py` — BM25 + dense search
+  - `reasoning.py` — Groq Claude reasoning
+  - `code.py` — Safe code execution
+  - `data_analysis.py` — Pandas/polars
+  - `tool_agent.py` — Public API orchestrator
+- `src/conductor/tools/` — Public API wrappers:
+  - `weather.py` — Weather API client
+  - `news.py` — News API client
+  - `wikipedia.py` — Wikipedia client
+  - `github.py` — GitHub API client
+  - `stock.py` — Stock market API client
+  - `currency.py` — Exchange rate API client
+  - `tool_registry.py` — Auto-route tasks to appropriate API
+- `src/conductor/orchestrator.py` — Main execution engine
+- `src/conductor/api.py` — FastAPI REST endpoints
+- `src/conductor/models.py` — Pydantic schemas for Task, Result, Agent, Tool
+
+### Benchmarking
+- `benchmarks/evaluate.py` — Harness to run benchmark suite
+- Benchmark tasks (15-20) covering:
+  - Multi-step retrieval queries (local search)
+  - Code generation + execution
+  - Multi-agent reasoning (Groq Claude)
+  - Public API integration:
+    - Weather queries (current + forecast)
+    - News/trending (latest articles by topic)
+    - Financial lookups (stock prices, exchange rates)
+    - GitHub code search + repo info
+    - Wikipedia research + fact verification
+  - Mixed multi-agent workloads (e.g., "Find trending AI news, what's weather in SF, and estimate cost of flight")
+- Metrics:
+  - Success rate (%)
+  - Latency (p50/p95/p99 ms)
+  - API cost per query (Groq token cost only; public APIs tracked separately)
+  - Cost per successful task
+  - API error handling rate (fallback success)
+- Comparison baseline: AutoGen default orchestration on same tasks (using same APIs)
+
+### Testing
+- Unit tests for each component (>80% coverage)
+- Integration tests for common workflows
+- Load test (concurrent requests, degradation profile)
+
+### Documentation
+- README with architecture diagram (Mermaid DAG)
+- API docs (auto-generated from FastAPI)
+- Setup guide (pip install, environment variables)
+- Example: "How to add a new agent"
+
+### Deployment
+- `Dockerfile` + `docker-compose.yml`
+- `.env.example` with all config (API keys, timeouts, etc.)
+- Makefile for common tasks (test, lint, benchmark, docker-build)
+
+## Requirements
+
+### Functional
+1. Decompose queries without hallucinating tasks
+2. Route tasks to correct agent within 500ms (excluding LLM latency)
+3. Execute 3+ concurrent tasks in parallel
+4. Recover from single agent failure (try fallback or alternate API)
+5. Auto-detect public API needs and route to ToolAgent + correct API
+6. Handle API rate limits gracefully (queue, retry, degrade)
+7. Fall back to local reasoning if API fails
+8. Log all executions + API calls for audit
+
+### Non-Functional
+1. Latency: Total time < 2x native single-LLM call for comparable tasks
+2. Cost: Free tier sustainable (Groq free + free API tier usage)
+3. Reliability: 95%+ task success rate on benchmark (including API failures)
+4. Code quality: Type-hinted, PEP-8, no bare excepts, docstrings on all functions
+5. API resilience: 90%+ success rate even with 1-2 APIs down
+
+## Configuration & Setup
+
+### Required API Keys (.env file)
+```
+GROQ_API_KEY=<free from groq.com>
+OPENWEATHER_API_KEY=<free from openweathermap.org>
+NEWSAPI_API_KEY=<free from newsapi.org>
+GITHUB_TOKEN=<free from github.com/settings/tokens>
+ALPHA_VANTAGE_KEY=<free from alphavantage.co>
+EXCHANGERATE_API_KEY=<free from exchangerate-api.com>
+```
+
+### Installation
+```bash
+pip install -r requirements.txt
+export $(cat .env | xargs)
+python -m pytest tests/  # run tests
+python -m benchmarks.evaluate  # run benchmark suite
+uvicorn src.conductor.api:app --reload  # run API
+```
+
+## Success Criteria
+- Beat AutoGen on ≥2 metrics (latency, cost, success rate) on benchmark suite
+- Successfully integrate ≥6 public APIs into ToolAgent
+- Ship with 15-20 working example queries (multi-agent + API-powered)
+- Full test coverage + README
+- Reproducible benchmark results with Groq + API costs tracked
+- Demonstrate graceful fallback when API is down or rate-limited
+- Clean, well-documented code ready for GitHub portfolio
+
+## Output Format
+Fully functional project in `/home/claude/conductor/` with:
+- All source files
+- Benchmark suite + results.json
+- Docker setup
+- README with quick-start
+- Ready to deploy or submit for portfolio
