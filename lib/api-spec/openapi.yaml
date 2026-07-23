@@ -3,13 +3,21 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: CONDUCTOR - Agent Routing & Task Decomposition OS
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: queries
+    description: Query submission and execution
+  - name: agents
+    description: Agent registry and performance
+  - name: stats
+    description: System statistics
+  - name: benchmark
+    description: Benchmarking suite
 paths:
   /healthz:
     get:
@@ -24,13 +32,474 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /queries:
+    get:
+      operationId: listQueries
+      tags: [queries]
+      summary: List all queries
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, running, completed, failed, cancelled]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: List of queries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuerySummary"
+    post:
+      operationId: submitQuery
+      tags: [queries]
+      summary: Submit a new query for decomposition and execution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryInput"
+      responses:
+        "201":
+          description: Query accepted and queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryItem"
+
+  /queries/{id}:
+    get:
+      operationId: getQuery
+      tags: [queries]
+      summary: Get query with full execution trace
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Query detail with task trace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryItem"
+        "404":
+          description: Query not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /queries/{id}/cancel:
+    post:
+      operationId: cancelQuery
+      tags: [queries]
+      summary: Cancel a running query
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Query cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryItem"
+        "404":
+          description: Query not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      summary: List all registered agents with performance stats
+      responses:
+        "200":
+          description: Agent registry
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentInfo"
+
+  /stats:
+    get:
+      operationId: getStats
+      tags: [stats]
+      summary: Get system-wide statistics
+      responses:
+        "200":
+          description: System statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemStats"
+
+  /stats/dashboard:
+    get:
+      operationId: getDashboardStats
+      tags: [stats]
+      summary: Get dashboard summary with recent activity
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /benchmark/results:
+    get:
+      operationId: listBenchmarkResults
+      tags: [benchmark]
+      summary: List benchmark run results
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Benchmark results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BenchmarkResult"
+
+  /benchmark/run:
+    post:
+      operationId: runBenchmark
+      tags: [benchmark]
+      summary: Run a benchmark suite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BenchmarkSuiteInput"
+      responses:
+        "202":
+          description: Benchmark started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BenchmarkRun"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    QueryInput:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          description: The natural-language query to decompose and execute
+        timeout:
+          type: ["integer", "null"]
+          description: Per-task timeout in seconds (default 30)
+
+    TaskItem:
+      type: object
+      required: [id, description, capabilities, status, dependencies, output_format, output_schema]
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        task_type:
+          type: ["string", "null"]
+        agent:
+          type: ["string", "null"]
+        query:
+          type: ["string", "null"]
+        prompt:
+          type: ["string", "null"]
+        input_bindings:
+          type: object
+          additionalProperties:
+            type: string
+        output:
+          type: ["string", "null"]
+        output_format:
+          type: string
+          enum: [json_object, json_array, string, number]
+        output_schema:
+          type: object
+          additionalProperties: true
+        extraction_path:
+          type: ["string", "null"]
+        loop_over:
+          type: ["string", "null"]
+        loop_var:
+          type: ["object", "null"]
+          additionalProperties: true
+        prompt_template:
+          type: ["string", "null"]
+        actual_input:
+          type: ["string", "null"]
+        agent_id:
+          type: ["string", "null"]
+        agent_name:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        result:
+          type: ["string", "null"]
+        error:
+          type: ["string", "null"]
+        latency_ms:
+          type: ["number", "null"]
+        tokens_used:
+          type: ["integer", "null"]
+        cost_usd:
+          type: ["number", "null"]
+        dependencies:
+          type: array
+          items:
+            type: string
+
+    QuerySummary:
+      type: object
+      required: [id, query, status, task_count, completed_tasks, created_at]
+      properties:
+        id:
+          type: string
+        query:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        task_count:
+          type: integer
+        completed_tasks:
+          type: integer
+        total_latency_ms:
+          type: ["number", "null"]
+        total_cost_usd:
+          type: ["number", "null"]
+        created_at:
+          type: string
+        completed_at:
+          type: ["string", "null"]
+
+    QueryItem:
+      type: object
+      required: [id, query, status, tasks, created_at]
+      properties:
+        id:
+          type: string
+        query:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskItem"
+        final_result:
+          type: ["string", "null"]
+        total_latency_ms:
+          type: ["number", "null"]
+        total_tokens:
+          type: ["integer", "null"]
+        total_cost_usd:
+          type: ["number", "null"]
+        error:
+          type: ["string", "null"]
+        created_at:
+          type: string
+        completed_at:
+          type: ["string", "null"]
+
+    AgentPerfStats:
+      type: object
+      required: [total_tasks, success_rate, avg_latency_ms, total_cost_usd]
+      properties:
+        total_tasks:
+          type: integer
+        success_rate:
+          type: number
+        avg_latency_ms:
+          type: number
+        total_cost_usd:
+          type: number
+
+    AgentInfo:
+      type: object
+      required: [id, name, capabilities, stats, is_available, description]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        stats:
+          $ref: "#/components/schemas/AgentPerfStats"
+        is_available:
+          type: boolean
+
+    SystemStats:
+      type: object
+      required: [total_queries, success_rate, avg_latency_ms, total_cost_usd, queries_today, avg_tasks_per_query]
+      properties:
+        total_queries:
+          type: integer
+        success_rate:
+          type: number
+        avg_latency_ms:
+          type: number
+        total_cost_usd:
+          type: number
+        queries_today:
+          type: integer
+        avg_tasks_per_query:
+          type: number
+        most_used_agent:
+          type: ["string", "null"]
+
+    LatencyPercentiles:
+      type: object
+      required: [p50, p95, p99]
+      properties:
+        p50:
+          type: number
+        p95:
+          type: number
+        p99:
+          type: number
+
+    DashboardStats:
+      type: object
+      required: [system, recent_queries, agent_breakdown, latency_percentiles]
+      properties:
+        system:
+          $ref: "#/components/schemas/SystemStats"
+        recent_queries:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuerySummary"
+        agent_breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentInfo"
+        latency_percentiles:
+          $ref: "#/components/schemas/LatencyPercentiles"
+
+    BenchmarkTaskResult:
+      type: object
+      required: [name, category, status, latency_ms]
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+        status:
+          type: string
+          enum: [passed, failed, error]
+        latency_ms:
+          type: number
+        error:
+          type: ["string", "null"]
+
+    BenchmarkResult:
+      type: object
+      required: [id, name, status, task_count, success_rate, avg_latency_ms, p50_latency_ms, p95_latency_ms, total_cost_usd, ran_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        task_count:
+          type: integer
+        success_rate:
+          type: number
+        avg_latency_ms:
+          type: number
+        p50_latency_ms:
+          type: number
+        p95_latency_ms:
+          type: number
+        total_cost_usd:
+          type: number
+        ran_at:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/BenchmarkTaskResult"
+
+    BenchmarkSuiteInput:
+      type: object
+      properties:
+        suite:
+          type: string
+          enum: [full, quick, api_only, reasoning_only]
+          description: Which benchmark suite to run (default full)
+
+    BenchmarkRun:
+      type: object
+      required: [id, status, suite, started_at]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        suite:
+          type: string
+        started_at:
+          type: string

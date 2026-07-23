@@ -1,0 +1,2 @@
+- [CONDUCTOR architecture](conductor-arch.md) — Python FastAPI backend + React dashboard; Python lives in artifacts/api-server/conductor/, UI in artifacts/conductor-ui/
+- [Python runtime setup](conductor-python.md) — Python 3.11 installed via module; packages in .pythonlibs; start.sh must use absolute path /home/runner/workspace/artifacts/api-server/start.sh

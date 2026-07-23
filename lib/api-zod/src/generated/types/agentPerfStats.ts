@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface AgentPerfStats {
+  total_tasks: number;
+  success_rate: number;
+  avg_latency_ms: number;
+  total_cost_usd: number;
 }

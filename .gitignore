@@ -28,6 +28,9 @@ node_modules
 !.vscode/extensions.json
 
 # misc
+/.env
+/.env.*
+!.env.example
 /.sass-cache
 /connect.lock
 /coverage
@@ -47,3 +50,10 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+artifacts/
+*.db
+*.log
+.pnpm-store/
+.env
+node_modules/

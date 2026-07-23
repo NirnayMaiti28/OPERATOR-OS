@@ -5,7 +5,9 @@
  * CONDUCTOR - Agent Routing & Task Decomposition OS
  * OpenAPI spec version: 0.1.0
  */
+import type { ListQueriesStatus } from './listQueriesStatus';
 
-export interface HealthStatus {
-  status: string;
-}
+export type ListQueriesParams = {
+status?: ListQueriesStatus;
+limit?: number;
+};
