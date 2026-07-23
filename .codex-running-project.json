@@ -1,7 +1,0 @@
-{
-    "uiUrl":  "http://localhost:3000",
-    "apiPid":  19960,
-    "startedAt":  "2026-07-23T19:31:33.8915709+05:30",
-    "uiPid":  25604,
-    "apiUrl":  "http://localhost:8080/api/healthz"
-}
